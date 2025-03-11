@@ -6,21 +6,17 @@ class Money {
     private int $cents;
 
     public function __construct(int $whole = 0, int $cents = 0) {
-        $this->whole = $whole;
-        $this->cents = $cents;
+        $this->setMoney($whole, $cents);
     }
 
     public function setMoney(int $whole, int $cents): void {
-        $this->whole = $whole;
-        $this->cents = $cents;
+        $totalCents = $whole * 100 + $cents;
+        $this->whole = intdiv($totalCents, 100);
+        $this->cents = $totalCents % 100;
     }
 
-    public function getWhole(): int {
-        return $this->whole;
-    }
-
-    public function getCents(): int {
-        return $this->cents;
+    public function subtract(Money $amount): void {
+        $this->setMoney($this->whole, $this->cents - ($amount->whole * 100 + $amount->cents));
     }
 
     public function __toString(): string {
@@ -41,9 +37,7 @@ class Product {
     }
 
     public function reducePrice(Money $amount): void {
-        $totalCents = ($this->price->getWhole() * 100 + $this->price->getCents()) - ($amount->getWhole() * 100 + $amount->getCents());
-        $totalCents = max($totalCents, 0);
-        $this->price->setMoney(intdiv($totalCents, 100), $totalCents % 100);
+        $this->price->subtract($amount);
     }
 
     public function __toString(): string {
@@ -51,7 +45,7 @@ class Product {
     }
 }
 
-// 3. Клас Warehouse
+// 3. Клас WarehouseItem
 class WarehouseItem {
     public Product $product;
     public string $unit;
@@ -70,6 +64,7 @@ class WarehouseItem {
     }
 }
 
+// 4. Клас Warehouse
 class Warehouse {
     private array $items = [];
 
@@ -78,9 +73,12 @@ class Warehouse {
     }
 
     public function removeItem(string $productName, int $quantity): void {
-        foreach ($this->items as $item) {
-            if ($item->product->name === $productName && $item->quantity >= $quantity) {
+        foreach ($this->items as $key => $item) {
+            if ($item->product->name === $productName) {
                 $item->quantity -= $quantity;
+                if ($item->quantity <= 0) {
+                    unset($this->items[$key]);
+                }
                 break;
             }
         }
@@ -91,16 +89,36 @@ class Warehouse {
     }
 }
 
-// 4. Клас Reporting
+// 5. Інтерфейс InvoiceGenerator
+interface InvoiceGenerator {
+    public function generate(WarehouseItem $item, int $quantity): string;
+}
+
+// 6. Реалізації InvoiceGenerator
+class IncomeInvoice implements InvoiceGenerator {
+    public function generate(WarehouseItem $item, int $quantity): string {
+        return "Income Invoice: {$item->product->name} x {$quantity}, Price: {$item->product->price}";
+    }
+}
+
+class ExpenseInvoice implements InvoiceGenerator {
+    public function generate(WarehouseItem $item, int $quantity): string {
+        return "Expense Invoice: {$item->product->name} x {$quantity}, Price: {$item->product->price}";
+    }
+}
+
+// 7. Клас Reporting
 class Reporting {
+    private static function generateInvoice(InvoiceGenerator $invoice, WarehouseItem $item, int $quantity): string {
+        return $invoice->generate($item, $quantity);
+    }
+
     public static function incomeInvoice(WarehouseItem $item, int $quantity): string {
-        return "Income Invoice: {$item->product->name} x {$quantity}, Unit Price: {$item->product->price}, Total: " .
-            ($item->product->price->getWhole() * $quantity) . '.' . str_pad($item->product->price->getCents() * $quantity, 2, '0', STR_PAD_LEFT);
+        return self::generateInvoice(new IncomeInvoice(), $item, $quantity);
     }
 
     public static function expenseInvoice(WarehouseItem $item, int $quantity): string {
-        return "Expense Invoice: {$item->product->name} x {$quantity}, Unit Price: {$item->product->price}, Total: " .
-            ($item->product->price->getWhole() * $quantity) . '.' . str_pad($item->product->price->getCents() * $quantity, 2, '0', STR_PAD_LEFT);
+        return self::generateInvoice(new ExpenseInvoice(), $item, $quantity);
     }
 
     public static function inventoryReport(Warehouse $warehouse): string {
